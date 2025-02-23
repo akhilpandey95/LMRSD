@@ -11,10 +11,10 @@ reasoning beyond math/programming domains is **hard**</i> is a well agreed
 upon notion.
 
 ### Data
-<img src="./data/media/review_joint_distribution.png" width=400 height=300>
+<img src="./data/media/review_joint_distribution.png" width=500 height=400>
 
 More about the data can be found [here](./data/README.md).
-> `NOTE`: The datasets are available as parquet files and can be found [here](https://drive.google.com/drive/folders/1nAPX7PFgCbhGVaHMhkMqbak9dCg4WxfL?usp=sharing).
+> `NOTE`: The datasets are available as parquet files on Google drive, and they can be found [here](https://drive.google.com/drive/folders/1nAPX7PFgCbhGVaHMhkMqbak9dCg4WxfL?usp=sharing).
 
 ### Repository structure
 
