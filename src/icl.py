@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from collections import Counter, OrderedDict
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, set_seed
 
+from src.prompts import *
 from src.schema import *
 
 # read the ICLR dataset
@@ -243,29 +244,9 @@ def generate_review(model, tokenizer, input_text, max_tokens, device, tokenomics
 
 # init model
 model, tokenizer = load_model("llama3.1-70b", device="cuda")
-# prompt to generate open review style review
-input_text = """
-<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-You are a helpful intelligent peer review assistant. You have the ability to take scientific papers and write reviews
 
-<|eot_id|><|start_header_id|>user<|end_header_id|>
-SCIENTIFIC_PAPER_TITLE:
-```
-PAPER_TITLE_CONTENT
-```
-
-SCIENTIFIC_PAPER_FULL_TEXT:
-```
-PAPER_FULL_TEXT_CONTENT
-```
-
-Write a peer review for the above scientific work
-<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-"""
-
-# str replace
-input_text = input_text.replace("PAPER_TITLE_CONTENT", df_open_reviews.select("paper_title")[0].item())
-input_text = input_text.replace("PAPER_FULL_TEXT_CONTENT", df_open_reviews.select("paper_content")[0].item())
+# load simple prompt
+input_text = load_sample_prompt(df_open_reviews, 0)
 
 # generate a peer review
 outputs, input_tokens = generate_review(model, tokenizer, input_text, max_tokens=1024, device="cuda")
@@ -276,37 +257,8 @@ print("Peer Review:")
 print(output)
 print("----------------------------------")
 
-# prompt to generate open review style review
-input_text = """
-<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-You are a helpful intelligent peer review assistant. You have the ability to take scientific papers and write reviews
-
-RULES:
-1. After examining the scientific document, you have to provide review of paper's idea, and paper's content.
-2. Paper's idea reivew must consist of idea_only_review_rating(description: str, score: int), idea_only_review_content(str), idea_only_review_confidence (description: str, score: int).
-3. Paper's content reivew must consist of review_rating(description: str, score: int), review_content(str), review_confidence (description: str, score: int).
-4. All scores range from 0 to 10.
-5. DONOT finish `description` or any text prematurely in the middle of sentence.
-6. Include complete sentences and donot chop the text.
-    
-<|eot_id|><|start_header_id|>user<|end_header_id|>
-SCIENTIFIC_PAPER_TITLE:
-```
-PAPER_TITLE_CONTENT
-```
-
-SCIENTIFIC_PAPER_FULL_TEXT:
-```
-PAPER_FULL_TEXT_CONTENT
-```
-
-Write a peer review for the above scientific work
-<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-"""
-
-# str replace
-input_text = input_text.replace("PAPER_TITLE_CONTENT", df_open_reviews.select("paper_title")[0].item())
-input_text = input_text.replace("PAPER_FULL_TEXT_CONTENT", df_open_reviews.select("paper_content")[0].item())
+# load prompt with guidelines and supports structured outputs
+input_text = load_sample_prompt(df_open_reviews, 0, structured_guidelines=True)
 
 # generate a peer review
 outputs, input_tokens = generate_review(model, tokenizer, \
