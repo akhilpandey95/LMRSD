@@ -24,14 +24,15 @@ More about the data can be found [here](./data/README.md).
 ├── data
 │   ├── README.md
 │   ├── __init__.py
-│   ├── data_raw.parquet
 │   └── media
 │       ├── review_idea_distribution.png
 │       ├── review_joint_distribution.png
 │       └── review_paper_distribution.png
 └── src
     ├── __init__.py
-    └── icl.py
+    ├── icl.py
+    ├── prompts.py
+    └── schema.py
 ```
 
 ### Environment setup
