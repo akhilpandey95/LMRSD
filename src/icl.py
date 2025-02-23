@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 from collections import Counter, OrderedDict
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, set_seed
 
+from src.schema import *
+
 # read the ICLR dataset
 df_open_reviews = pl.scan_parquet("../data/*.parquet")
 
@@ -57,33 +59,26 @@ def token_fits_128K(paper_content, return_length=False):
     else:
         return tokens < 128000
 
-# helper function to generate review
-def generate_review(model_name, input_text, max_tokens, device):
+# helper function to load/initalize the model
+def load_model(model_name, device):
     """
-    Use ICL to generate a simple review
-    of a given scientific paper
+    Given a model path, load tokenizer-model
+    pair and return the objects tagged to the
+    given device (cpu/cuda)
 
     Parameters
     ------------
     arg1 | model_name: str
         Use model catalog to load local model weights
-    arg2 | input_text: str
-        Input text for the model with paper content and ICL instruction
-    arg3 | max_tokens: int
-        Maximum tokens to generate for writing a review
-    arg4 | device: str
+    arg2 | device: str
         Hardware acceleration, defaults to "cpu" if any errors arise
 
     Returns
     ------------
-        Text
-            str
+        Tuple(AutoModel, AutoTokenizer)
     """
     # device for acceleration
     device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    # null outpput
-    output = None
 
     # set the model-id
     model_catalog = {
@@ -138,6 +133,38 @@ def generate_review(model_name, input_text, max_tokens, device):
     end = time.time()
     print("Model-tokenizer Load Time:", end - start)
     print("----------------------------------")
+
+    # return the pair
+    return model, tokenizer
+
+# helper function to generate review
+def generate_review(model, tokenizer, input_text, max_tokens, device, tokenomics=True, structured_schema=None):
+    """
+    Use ICL to generate a simple review
+    of a given scientific paper
+
+    Parameters
+    ------------
+    arg1 | model: torch.nn.Module
+        AutoModel model object
+    arg2 | tokenizer: torch.nn.Module
+        AutoTokenizer tokenizer object
+    arg3 | input_text: str
+        Input text for the model with paper content and ICL instruction
+    arg4 | max_tokens: int
+        Maximum tokens to generate for writing a review
+    arg5 | device: str
+        Hardware acceleration, defaults to "cpu" if any errors arise
+    arg6 | tokenomics: bool
+        Boolean flag to display TPS (token per sec) statistics after model.generate()
+
+    Returns
+    ------------
+        Tuple
+            (torch.Tensor, int)
+    """
+    # null outpput
+    outputs = None
     
     # seed for reproducibility
     set_seed(2025)
@@ -165,24 +192,44 @@ def generate_review(model_name, input_text, max_tokens, device):
     with torch.no_grad():
         # time check
         start = time.time()
-        
-        # routine model.generate()
-        outputs = model.generate(
-            input_ids=input_encoded_ids,
-            attention_mask=input_encoded_attn_mask,
-            max_new_tokens=max_tokens,
-            do_sample=False,
-            num_beams=1,
-            pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id
-        )
-        
+
+        # structured output generation ?
+        if structured_schema:
+            # create outlines model
+            outlines_model = models.Transformers(model, tokenizer)
+            
+            # generate scoring
+            generator_outlines = generate.json(outlines_model, structured_schema)
+
+            # pass the text prompt
+            outlines_output = generator_outlines(input_text)
+            
+            # convert pydantic object to dict
+            outputs = outlines_output.dict()
+        else:
+            # routine model.generate()
+            outputs = model.generate(
+                input_ids=input_encoded_ids,
+                attention_mask=input_encoded_attn_mask,
+                max_new_tokens=max_tokens,
+                do_sample=False,
+                num_beams=1,
+                pad_token_id=tokenizer.pad_token_id,
+                eos_token_id=tokenizer.eos_token_id
+            )
+            
         # inference time
         end = time.time()
         inference = end - start
-        
-        # model.generate() output
-        output = tokenizer.decode(outputs[0][input_shape:], skip_special_tokens=True)
+
+        # tokenomics ?
+        if tokenomics:
+            # tps logic
+            new_tokens = outputs[0].shape[0] - input_shape
+            tokens_per_second = new_tokens / inference if inference > 0 else float('inf')
+            print(f"Inference time: {inference:.2f} seconds")
+            print(f"New tokens generated: {new_tokens}")
+            print(f"Tokens per second: {tokens_per_second:.2f} tps")
 
         # empty cuda cache
         torch.cuda.empty_cache()
@@ -191,9 +238,11 @@ def generate_review(model_name, input_text, max_tokens, device):
         del model, tokenizer
         gc.collect()
 
-    # return the output
-    return output
+    # return the torch outputs and output shape
+    return outputs, input_shape
 
+# init model
+model, tokenizer = load_model("llama3.1-70b", device="cuda")
 # prompt to generate open review style review
 input_text = """
 <|begin_of_text|><|start_header_id|>system<|end_header_id|>
@@ -219,14 +268,52 @@ input_text = input_text.replace("PAPER_TITLE_CONTENT", df_open_reviews.select("p
 input_text = input_text.replace("PAPER_FULL_TEXT_CONTENT", df_open_reviews.select("paper_content")[0].item())
 
 # generate a peer review
-output = generate_review("llama3.1-70b", input_text, max_tokens=1024, device="cuda")
+outputs, input_tokens = generate_review(model, tokenizer, input_text, max_tokens=1024, device="cuda")
+
+# decode model.generate() output
+output = tokenizer.decode(outputs[0][input_tokens:], skip_special_tokens=True)
 print("Peer Review:")
 print(output)
 print("----------------------------------")
 
-# tps logic
-new_tokens = outputs[0].shape[0] - input_shape
-tokens_per_second = new_tokens / inference if inference > 0 else float('inf')
-print(f"Inference time: {inference:.2f} seconds")
-print(f"New tokens generated: {new_tokens}")
-print(f"Tokens per second: {tokens_per_second:.2f}")
+# prompt to generate open review style review
+input_text = """
+<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+You are a helpful intelligent peer review assistant. You have the ability to take scientific papers and write reviews
+
+RULES:
+1. After examining the scientific document, you have to provide review of paper's idea, and paper's content.
+2. Paper's idea reivew must consist of idea_only_review_rating(description: str, score: int), idea_only_review_content(str), idea_only_review_confidence (description: str, score: int).
+3. Paper's content reivew must consist of review_rating(description: str, score: int), review_content(str), review_confidence (description: str, score: int).
+4. All scores range from 0 to 10.
+5. DONOT finish `description` or any text prematurely in the middle of sentence.
+6. Include complete sentences and donot chop the text.
+    
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+SCIENTIFIC_PAPER_TITLE:
+```
+PAPER_TITLE_CONTENT
+```
+
+SCIENTIFIC_PAPER_FULL_TEXT:
+```
+PAPER_FULL_TEXT_CONTENT
+```
+
+Write a peer review for the above scientific work
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+"""
+
+# str replace
+input_text = input_text.replace("PAPER_TITLE_CONTENT", df_open_reviews.select("paper_title")[0].item())
+input_text = input_text.replace("PAPER_FULL_TEXT_CONTENT", df_open_reviews.select("paper_content")[0].item())
+
+# generate a peer review
+outputs, input_tokens = generate_review(model, tokenizer, \
+                                        input_text, max_tokens=1024, device="cuda", \
+                                        tokenomics=False, structured_schema=PeerReview)
+
+# decode model.generate() output
+print("Peer Review:")
+pprint(outputs)
+print("----------------------------------")
