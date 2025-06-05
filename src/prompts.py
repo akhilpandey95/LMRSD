@@ -5,27 +5,27 @@
 
 # helper function to load/initalize the prompt
 def load_sample_prompt(dataframe, sample_idx=0, structured_guidelines=False):
-    """
-    Given a dataframe with openreviews use a sample
-    from the dataset and generate a prompt that will
-    be supplied to a model to generate peer review
+	"""
+	Given a dataframe with openreviews use a sample
+	from the dataset and generate a prompt that will
+	be supplied to a model to generate peer review
 
-    Parameters
-    ------------
-    arg1 | dataframe: pl.DataFrame
-        Dataframe with openreview data for papers
-    arg2 | sample_idx: int[OPTIONAL]
-        Sample index that serves as row number from the dataframe
-    arg3 | structured_guidelines[OPTIONAL]
-        Boolean flag to return a prompt with guidelines and support
-        structured outputs
+	Parameters
+	------------
+	arg1 | dataframe: pl.DataFrame
+		Dataframe with openreview data for papers
+	arg2 | sample_idx: int[OPTIONAL]
+		Sample index that serves as row number from the dataframe
+	arg3 | structured_guidelines[OPTIONAL]
+		Boolean flag to return a prompt with guidelines and support
+		structured outputs
 
-    Returns
-    ------------
-        Text
-    """
-    # prompt init
-    prompt, input_text = None, None
+	Returns
+	------------
+		Text
+	"""
+	# prompt init
+	prompt, input_text = None, None
 
 	# prompt with guidelines
 	if structured_guidelines:
@@ -41,7 +41,7 @@ def load_sample_prompt(dataframe, sample_idx=0, structured_guidelines=False):
 		4. All scores range from 0 to 10.
 		5. DONOT finish `description` or any text prematurely in the middle of sentence.
 		6. Include complete sentences and donot chop the text.
-			
+
 		<|eot_id|><|start_header_id|>user<|end_header_id|>
 		SCIENTIFIC_PAPER_TITLE:
 		```
@@ -81,5 +81,5 @@ def load_sample_prompt(dataframe, sample_idx=0, structured_guidelines=False):
 	prompt = input_text.replace("PAPER_TITLE_CONTENT", dataframe.select("paper_title")[sample_idx].item())
 	prompt = input_text.replace("PAPER_FULL_TEXT_CONTENT", dataframe.select("paper_content")[sample_idx].item())
 
-    # return the text
-    return prompt
+	# return the text
+	return prompt
