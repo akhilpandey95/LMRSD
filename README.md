@@ -1,14 +1,26 @@
 # LMRSD (Learning meaningful rewards on Scientific Documents)
 
-### About
-LM's are execptional at generating texts across various domains.
+
+### Core motivation
+- Using Language models in scholarly peer review seems comes with significant risks surrounding safety, research integrity and validity of the review.
+- Inevitably people utilize LLMs as pre-review agents if not fully autonomous peer-review agents.
+- Lack of a systematic evaluation of LLMs generating reviews across science disciplines misses the mark on and assessing the alignment/misalignment question.
+
+### Problem formulation
+- Given a Paper P, field F, and peer-review R, a traditional learning framework would capture the decision function θ(R^ | P, F) through a training objective minimizing R by Mean Absolute Error.
+	- Assumption 1: Representations from different pre-trained models capturing crucial information of P and F act as features to train the model θ.
+	- Assumption 2: Peer-review R includes both a sequence of tokens Rtext [r1, r2, r3, ….rn] and a discrete value Rscore representing the score gauging the evaluation of the idea/manuscript on a scale of 1-10. 
+- Utilizing large language models(LLMs) can provide a training-free framework to understand peer-review Rscore and assess the alignment/mis-alignment of LLMs over the real-world outcome such as hit-paper status in field F.
+- Systematically assessing alignment of LLMs Rscore would help us gauge the safety risks involved with deploying large language models as agents for pre-review to help reviewers with peer-review.
 
 
-The core research question we are trying to investigate surrounds the
-topic of credit assignment problem for qualitative texts. More specifically,
-if there exists a scientific task, <i>Creating reward signals for LLM
-reasoning beyond math/programming domains is **hard**</i> is a well agreed
-upon notion.
+### Research Agenda
+- RQ-1: Understanding the joint distribution of idea review scores and paper review scores for a collection of language models.
+- RQ-2: Apart from the accuracy, observe the alignment and misalignment of each model to observe which agrees/disagrees the most with the human label.
+- RQ-3: Assessing reviews where humans/LLMs can gauge hit-paper 1%, 5%, and 10% outcomes.
+- Ablation-1: Observing the effect of stochasticity in generating the reviews for LLMs.
+- Ablation-2: Observing the effect of prompt instructions over idea/paper review scores.
+- Ablation-3: Capturing memorization/generalization to probe pretrained knowledge of dataset.
 
 ### Data
 <img src="./data/media/review_joint_distribution.png" width=500 height=400>
