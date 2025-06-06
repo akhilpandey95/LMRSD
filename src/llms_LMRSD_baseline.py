@@ -7,16 +7,18 @@ import os
 import gc
 import time
 import json
+import math
 import torch
 import pathlib
+import contextlib
 import logging
 import datasets
-import numpy as np
 import polars as pl
 from tqdm import tqdm
-from typing import Any, List
-from outlines import models, generate
-from pydantic import BaseModel, Field, constr, conlist
+from pydantic import BaseModel
+from torch.cuda import mem_get_info
+from collections import defaultdict
+# from outlines import models, generate
 from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
 # enable logging
@@ -56,6 +58,43 @@ class PeerReview(BaseModel):
     peer_review_paper_idea: PeerReviewIdea
     peer_review_paper_content: PeerReviewPaperContent
 
+# helper function for model VRAM estimation
+DTYPE_SIZE = {"float16": 2, "bfloat16": 2, "float32": 4}
+def get_dtype_size(dtype):
+    return DTYPE_SIZE[str(dtype).split('.')[-1]]
+
+def free_vram_bytes(device="cuda"):
+    free, _ = mem_get_info(device)
+    return free
+
+# helper function to estimate dynamic batch size
+def estimate_dynamo(model, seq_len, safety=0.90):
+    cfg = model.config
+    n_layers  = getattr(cfg, "num_hidden_layers", getattr(cfg, "n_layer", None))
+    hidden    = getattr(cfg, "hidden_size",  cfg.hidden_size)
+    n_params  = sum(p.numel() for p in model.parameters())
+    dtype_sz  = get_dtype_size(model.dtype)
+
+    weight_bytes = n_params * dtype_sz
+    per_token    = 2 * n_layers * hidden * dtype_sz  # K + V
+    cache_budget = free_vram_bytes() * safety - weight_bytes
+    return max(1, cache_budget // (per_token * seq_len))
+
+# helper function to resume text generation
+def get_gen_state(path):
+    done = defaultdict(set)
+    if not os.path.exists(path):
+        return done
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+                done[rec["model_name"]].add(rec["paperid"])
+            except Exception:
+                # corrupt line? ignore – safer to regenerate
+                continue
+    return done
+
 # helper function to load/initalize the prompt
 def process_prompt(raw_text, tokenizer, device, task="idea", prompt_type="prompt"):
     """
@@ -68,7 +107,7 @@ def process_prompt(raw_text, tokenizer, device, task="idea", prompt_type="prompt
         Raw input text without prompt template
     arg2 | tokenizer: transformers.tokenization_utils_fast.PreTrainedTokenizerFast
         Tokenizer from the model
-Qwen3-0.6B    arg3 | device: str
+    rg3 | device: str
         Device name for the inputs and attention masks to sit on
     arg4 | task: str[OPTIONAL]
         Task type either Review the "idea" of paper or review the "content"
@@ -97,7 +136,7 @@ Qwen3-0.6B    arg3 | device: str
     if task == "idea":
         # init user prompt for the task
         user_prompt = """
-        **Task:** You are given Paper title, abstract and keywords of a scientific 
+        **Task:** You are given Paper title, abstract and keywords of a scientific
         paper. Your goal is to accurately analyze the entire manuscript and play the
         role of a peer-reviewer to evaluate the ideas presented in the paper. You need
         to give a numerical score outlining your review and confidence in your decision.
@@ -132,7 +171,7 @@ Qwen3-0.6B    arg3 | device: str
 
         **Keywords:**
         ```plaintext
-        KEQwen3-0.6BYWORDS
+        KEYWORDS
         ```
         """
     else:
@@ -141,7 +180,7 @@ Qwen3-0.6B    arg3 | device: str
         **Task:** You are given Paper title, keywords and full text of a scientific
         paper. Your goal is to accurately analyze the entire manuscript and play the
         role of a peer-reviewer to evaluate the entire manuscript of the paper. You need
-        to give a numerical score outlining your full paper review and confidence in 
+        to give a numerical score outlining your full paper review and confidence in
         your decision.
 
         **Considerations:**
@@ -245,7 +284,7 @@ def lmrsd_zero_shot_eval(task, dataset):
         Tuple(AutoModel, AutoTokenizer) for local (model_client, model_name)
     """
     # model path
-    base_model_path = "/kellogg/proj/dashun/LLM/HuggingFaceCache/"
+    base_model_path = "/home/ubuntu/models/"
 
     # set the model-id
     model_catalog = [
@@ -254,25 +293,35 @@ def lmrsd_zero_shot_eval(task, dataset):
         "gemma-3-12b-it",
         "gemma-3-27b-it",
         "Llama-3.1-8B-Instruct",
-        "Llama-3.1-70B-Instruct",
+        #"Llama-3.1-70B-Instruct",
         "Llama-3.2-1B-Instruct",
         "Llama-3.2-3B-Instruct",
-        "Llama-3.3-70B-Instruct",
-        "Qwen2.5-72B-Instruct",
+        #"Llama-3.3-70B-Instruct",
+        #"Qwen2.5-72B-Instruct",
         "Qwen3-0.6B",
         "Qwen3-1.7B",
         "Qwen3-4B",
         "Qwen3-8B",
         "Qwen3-14B",
-        "Qwen3-32B"
+        "Qwen3-32B",
+        "OLMo-2-0425-1B-Instruct",
+        "OLMo-2-1124-7B-Instruct",
+        "OLMo-2-1124-13B-Instruct",
+        "OLMo-2-0325-32B-Instruct"
     ]
 
     # op dir path
-    output_dir = "/projects/p32534/code/LMRSD/lmrsd_zs_eval_outputs"
+    output_dir = "/home/ubuntu/lmrsd_zs_eval_outputs"
     output_file_path = os.path.join(output_dir, f"{task}.jsonl")
+    progress = get_gen_state(output_file_path)
 
     # iterate and run
     for model_name in model_catalog:
+        # skip the model
+        if model_name in progress and len(progress[model_name]) == len(dataset):
+            logger.info(f"Model {model_name} already complete – skipping.")
+            continue
+
         # set a model-id
         model_id = base_model_path + model_name
 
@@ -280,8 +329,7 @@ def lmrsd_zero_shot_eval(task, dataset):
         device = torch.device("cuda:0" if torch.cuda.is_available() else
                               ("mps" if torch.backends.mps.is_available() else "cpu"))
         logger.info("----------------------------------")
-        logger.info(
-            f"Using {device} to run SciRIFF task: {task} on {model_name}")
+        logger.info(f"Using {device} to run LMRSD task: {task} on {model_name}")
         logger.info("----------------------------------")
 
         # get model-tokenizer pair
@@ -306,11 +354,9 @@ def lmrsd_zero_shot_eval(task, dataset):
 
         # is it a llama tokenizer ?
         if "llama" in model_name.lower():
-            # pa/kellogg/proj/dashun/LLM/HuggingFaceCache/d token if needed
-            tokenizer.add_special_tokens(
-                {"pad_token": "<|finetune_right_pad_id|>"})
-            logger.info(
-                f"Setting <|finetune_right_pad_id|> token for {model_id}")
+            # pad token if needed
+            tokenizer.add_special_tokens({"pad_token": "<|finetune_right_pad_id|>"})
+            logger.info(f"Setting <|finetune_right_pad_id|> token for {model_id}")
             model.resize_token_embeddings(len(tokenizer))
 
             # llama prompt template
@@ -326,80 +372,90 @@ def lmrsd_zero_shot_eval(task, dataset):
         logger.info(f"Model-tokenizer Load Time:, {end - start} seconds")
         logger.info("----------------------------------")
 
+        # dynamo estimate
+        max_bs = estimate_dynamo(model, seq_len=4096)
+        logger.info(f"Using batch_size={max_bs} for {model_name}")
+
         # tokenizer quirks
         logger.info(f"BOS token-id: {tokenizer.bos_token_id}")
         logger.info(f"EOS token-id: {tokenizer.eos_token_id}")
         logger.info(f"PAD token-id: {tokenizer.pad_token_id}")
 
         # set top_p and temperature to none for reproducible outputs
+        model.eval()
         model.generation_config.temperature = None
         model.generation_config.top_p = None
         model.generation_config.top_k = None
 
         # sequential iterate over dataset for zs-eval
-        instances = []
-        with open(output_file_path, "a", encoding="utf-8") as f_out:
-            for i in tqdm(range(len(dataset))):
-                paperid = dataset[i]["paper_id"]
-                text = dataset[i]["input"]
-                y_true = dataset[i]["output"]
+        with open(output_file_path, "a", encoding="utf-8") as f_out, torch.inference_mode():
+            for start in tqdm(range(0, len(dataset), int(max_bs))):
+                # dynamic batching params
+                end = min(int(start + max_bs), len(dataset))
+                idx_range = range(start, end)
+
+                # get the batch
+                # batch = [dataset[i] for i in idx_range]
+                processed = progress.get(model_name, set())
+                batch = [dataset[i] for i in idx_range if dataset[i]["paper_id"] not in processed]
+
+                # is the batch empty ?
+                if not batch:
+                    continue
+
+                # tokenizer chat template apply
+                # text = process_prompt(dataset[i], tokenizer, device, task="idea", prompt_type="prompt")
+                prompts = [process_prompt(row, tokenizer, device, task="idea", prompt_type="prompt")[0] \
+                        for row in batch
+                ]
 
                 # get the tokenized representations of the input title
-                input_encoded = tokenizer(text, padding=True, return_tensors="pt")
-                input_encoded_ids = input_encoded["input_ids"].to(model.device)
-                input_encoded_attn_mask = input_encoded["attention_mask"].to(model.device)
-                input_shape = input_encoded["input_ids"].shape[1]
+                input_encoded = tokenizer(prompts, padding=True, return_tensors="pt").to(model.device)
+                # input_encoded = tokenizer(text[0], padding=True, return_tensors="pt")
+                # input_encoded_ids = input_encoded["input_ids"].to(model.device)
+                # input_encoded_attn_mask = input_encoded["attention_mask"].to(model.device)
+                # input_shape = input_encoded["input_ids"].shape[1]
+                input_shape = input_encoded["attention_mask"].sum(dim=1)
 
                 # get the outputs
-                outputs = model.generate(input_ids=input_encoded_ids,
-                                         attention_mask=input_encoded_attn_mask,
+                outputs = model.generate(**input_encoded,
                                          max_new_tokens=4096,
                                          do_sample=False,
                                          pad_token_id=tokenizer.pad_token_id,
                                          eos_token_id=tokenizer.eos_token_id)
 
                 # decode generated text
-                output = tokenizer.decode(
-                    outputs[0][input_shape:], skip_special_tokens=True)
+                for j, row in enumerate(batch):
+                    # decode
+                    # output = tokenizer.decode(outputs[0][input_shape:], skip_special_tokens=True)
+                    output = tokenizer.decode(outputs[j, input_shape[j]:], skip_special_tokens=True)
 
-                # save the output to file
-                result = {
-                    "model_name": model_name,
-                    "input": text,
-                    "y_true": y_true,
-                    "output": output
-                }
-                f_out.write(json.dumps(result) + "\n")
+                    # save the output to file
+                    result = {
+                        "model_name": model_name,
+                        "paperid": row["paper_id"],
+                        "y_true_med": row["median_idea_score"],
+                        "y_true_med_cf": row["median_idea_score_cf"],
+                        "y_true_avg": row["avg_idea_score"],
+                        "y_true_avg_cf": row["avg_idea_score_cf"],
+                        "input": prompts[j],
+                        "output": output
+                    }
+                    f_out.write(json.dumps(result) + "\n")
+                    processed.add(row["paper_id"])
                 f_out.flush()
 
                 # randomly print an example to showcase the model outputs
-                random_snap_points = [5, 10, 15, 20]
+                # random_snap_points = [5, 10, 15, 20]
                 # if i in random_snap_points:
                 #    logger.info(f"Randomly printing an example: index={i+1}:")
                 #    logger.info(f"Ground Truth: {y_true}")
                 #    logger.info(f"Prediction: {output}")
                 #logger.info("----------------------------------")
 
-                # add for metric
-                try:
-                    pred_json = json.loads(output)
-                except Exception as e:
-                    pred_json = {}
-                    logger.info(e)
+        logger.info(f"Completed running zs-evals for len(dataset) items on {model}")
 
-                # add the instance
-                instances.append(
-                    {"pred": pred_json, "ref": json.loads(y_true)})
-
-        # evaluate scores for the model
-        scores = metric.evaluate(instances)
-        logger.info(
-            f"{model_name} ner_f1_typed on {task}: {scores['typed']['f1']}")
-        logger.info(
-            f"{model_name} ner_f1_untyped on {task}: {scores['untyped']['f1']}")
-
-        logger.info(
-            f"Completed running zs-evals for len(dataset) items on {model}")
+        # free mem
         del model, tokenizer
         torch.cuda.empty_cache()
         gc.collect()
@@ -413,7 +469,7 @@ if __name__ == "__main__":
     set_seed(2025)
 
     # data dir
-    data_dir = "/projects/p32534/code/LMRSD/data"
+    data_dir = "/home/ubuntu/data"
     logger.info(f"Using data from {data_dir}")
 
     # load dataset on disk
@@ -435,19 +491,15 @@ if __name__ == "__main__":
     logger.info("----------------------------------")
     logger.info(f"KEYWORDS:\n{dataset[0]['paper_keywords']}")
     logger.info("----------------------------------")
-    #logger.info(f"IDEA Evaluation\n: Rating: {dataset[0]['idea_only_review_rating_score']}, Confidence: {dataset[0]['idea_only_review_confidence_score']}")
+    logger.info(dataset[0].keys())
+    logger.info(f"IDEA Evaluation\n: Rating: {dataset[0]['median_idea_score']}, Confidence: {dataset[0]['median_idea_score_cf']}")
 
     # run the eval on all models for task
     LMRSD_TASK = "idea"
-    tokenizer = AutoTokenizer.from_pretrained("/kellogg/proj/dashun/LLM/HuggingFaceCache/Qwen3-0.6B", trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained("/home/ubuntu/models/Qwen3-0.6B", trust_remote_code=True)
     tokenizer.padding_side = "left"
-    sample_prompt = process_prompt(dataset[0], tokenizer, "cpu", task="idea", prompt_type="prompt")
+    sample_prompt = process_prompt(dataset[0], tokenizer, "cuda:0", task="idea", prompt_type="prompt")
     logger.info(f"Sample prompt:\n{sample_prompt[0]}")
 
-    #lmrsd_zero_shot_eval(task=LMRSD_TASK, dataset=dataset)
-
-
-
-
-
-
+    # run the zs pipeline
+    lmrsd_zero_shot_eval(task=LMRSD_TASK, dataset=dataset)

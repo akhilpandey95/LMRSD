@@ -1,5 +1,12 @@
 ### Data:
 
+
+### Token distribution overlay across different LM model families
+<img src="./media/overlay_hist.png" alt="overlay-tkn-dist-abstract">
+<img src="./media/overlay_hist_ft.png" alt="overlay-tkn-dist-full-text">
+
+
+### Statistics about the dataset
 **Table 1: Count distribution of reviewer ratings for the paper**
 ```plaintext
 ┌─────────────────────┬─────────────┐
@@ -136,6 +143,19 @@ final dataset.
 │ MIDL.io/2019/Conference         ┆ 2019 ┆ 117         │
 │ MIDL.io/2023/Conference         ┆ 2023 ┆ 112         │
 └─────────────────────────────────┴──────┴─────────────┘
+```
+
+### LMRSD dataset
+
+Due to nulls in the full text within `lmrsd_ft_evaluation.parquet`, the entries were removed.
+```plaintext
+┌──────────┬─────────────┬───────────────┬─────────────────────┬────────────────────────┬────────────────────────┬───────────────────────────┐
+│ paper_id ┆ paper_title ┆ paper_content ┆ avg_ft_rating_score ┆ median_ft_rating_score ┆ avg_ft_rating_score_cf ┆ median_ft_rating_score_cf │
+│ ---      ┆ ---         ┆ ---           ┆ ---                 ┆ ---                    ┆ ---                    ┆ ---                       │
+│ u32      ┆ u32         ┆ u32           ┆ u32                 ┆ u32                    ┆ u32                    ┆ u32                       │
+╞══════════╪═════════════╪═══════════════╪═════════════════════╪════════════════════════╪════════════════════════╪═══════════════════════════╡
+│ 0        ┆ 0           ┆ 149           ┆ 195                 ┆ 195                    ┆ 794                    ┆ 794                       │
+└──────────┴─────────────┴───────────────┴─────────────────────┴────────────────────────┴────────────────────────┴───────────────────────────┘
 ```
 
 **Acknowledgement**
