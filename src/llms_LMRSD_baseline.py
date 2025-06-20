@@ -11,6 +11,7 @@ import math
 import torch
 import pathlib
 import contextlib
+import argparse
 import logging
 import datasets
 import polars as pl
@@ -35,10 +36,14 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 logger.info(f"Polars concurrency set to {pl.thread_pool_size()} threads.")
 
 # directory constants
-base_dir = pathlib.Path("/home/ubuntu/models")
-data_dir = pathlib.Path("/home/ubuntu/data")
-output_dir = pathlib.Path("/home/ubuntu/lmrsd_zs_eval_outputs")
-base_model_path = "/home/ubuntu/models/"
+#base_dir = pathlib.Path("/home/ubuntu/models")
+base_dir = pathlib.Path("/kellogg/proj/dashun/LLM/HuggingFaceCache")
+#data_dir = pathlib.Path("/home/ubuntu/data")
+data_dir = pathlib.Path("/projects/p32534/code/LMRSD/data")
+#output_dir = pathlib.Path("/home/ubuntu/lmrsd_zs_eval_outputs")
+output_dir = pathlib.Path("/projects/p32534/code/LMRSD/lmrsd_zs_eval_outputs")
+#base_model_path = "/home/ubuntu/models/"
+base_model_path = "/kellogg/proj/dashun/LLM/HuggingFaceCache/"
 
 # structured output schema for peer review scoring
 class PeerReviewScoringTuple(BaseModel):
@@ -95,7 +100,7 @@ def _maybe(cfg, dotted):
     return cur
 
 # helper function to estimate dynamic batch size
-def estimate_dynamo(model, seq_len: int, safety: float = 0.90) -> int:
+def estimate_dynamo(model, seq_len: int, safety: float = 0.90, multiproc=False) -> int:
     cfg = model.config
 
     # ---- discover num layers ------------------------------------------------
@@ -126,7 +131,17 @@ def estimate_dynamo(model, seq_len: int, safety: float = 0.90) -> int:
     weight_bytes = n_params * dtype_sz
     per_token = 2 * n_layers * hidden * dtype_sz
     free, _ = torch.cuda.mem_get_info(model.device)
-    cache_budget = free * safety - weight_bytes
+
+    # o3 suggestion :)
+    free_per_gpu = torch.tensor([torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())])
+
+    # calculate the cache budget
+    if not multiproc:
+        cache_budget = free * safety - weight_bytes
+    else:
+        cache_budget = free_per_gpu.min().item()*safety - weight_bytes/torch.cuda.device_count()
+
+    # return optimum batch size
     return max(1, cache_budget // (per_token * seq_len))
 
 # helper function to resume text generation
@@ -315,7 +330,7 @@ def process_prompt(raw_text, tokenizer, device, task="idea", prompt_type="prompt
     return prompt
 
 # helper function to load/initalize the model
-def lmrsd_zero_shot_eval(task, dataset):
+def lmrsd_zero_shot_eval(task, dataset, llm, opfile, multiproc=False):
     """
     Given a model path, load tokenizer-model
     pair and return the objects tagged to the
@@ -339,11 +354,11 @@ def lmrsd_zero_shot_eval(task, dataset):
         "gemma-3-12b-it",
         "gemma-3-27b-it",
         "Llama-3.1-8B-Instruct",
-        #"Llama-3.1-70B-Instruct",
+        "Llama-3.1-70B-Instruct",
         "Llama-3.2-1B-Instruct",
         "Llama-3.2-3B-Instruct",
-        #"Llama-3.3-70B-Instruct",
-        #"Qwen2.5-72B-Instruct",
+        "Llama-3.3-70B-Instruct",
+        "Qwen2.5-72B-Instruct",
         "Qwen3-0.6B",
         "Qwen3-1.7B",
         "Qwen3-4B",
@@ -356,8 +371,11 @@ def lmrsd_zero_shot_eval(task, dataset):
         "OLMo-2-0325-32B-Instruct"
     ]
 
+    # filter the model catalog
+    model_catalog = [llm]
+
     # op dir path
-    output_file_path = os.path.join(output_dir, f"{task}.jsonl")
+    output_file_path = os.path.join(output_dir, f"{opfile}.jsonl")
     progress = get_gen_state(output_file_path)
 
     # iterate and run
@@ -395,7 +413,7 @@ def lmrsd_zero_shot_eval(task, dataset):
                                                      trust_remote_code=True,
                                                      low_cpu_mem_usage=True,
                                                      attn_implementation=attn_implementation,
-                                                     device_map="auto")
+                                                     device_map="balanced")
 
         # is it a llama tokenizer ?
         if "llama" in model_name.lower():
@@ -418,7 +436,8 @@ def lmrsd_zero_shot_eval(task, dataset):
         logger.info("----------------------------------")
 
         # dynamo estimate
-        max_bs = estimate_dynamo(model, seq_len=4096)
+        max_bs = estimate_dynamo(model, seq_len=4096, multiproc=multiproc)
+        #max_bs = 20.0
         logger.info(f"Using batch_size={max_bs} for {model_name}")
 
         # tokenizer quirks
@@ -513,6 +532,14 @@ def lmrsd_zero_shot_eval(task, dataset):
 
 
 if __name__ == "__main__":
+    # cli args
+    parser = argparse.ArgumentParser(description="Compute lmrsd ZS eval for a given model")
+    parser.add_argument("--data-file", required=True, help="Parquet file (LMRSD)")
+    parser.add_argument("--llm", required=True, help="Model being used for ZS eval (LMRSD)")
+    parser.add_argument("--opfile", required=True, help="Output file name for ZS eval (LMRSD)")
+    parser.add_argument("--multiproc", required=True, default=False, action=argparse.BooleanOptionalAction, help="Running on multiple gpus?")
+    args = parser.parse_args()
+
     # set seed
     set_seed(2025)
 
@@ -524,7 +551,7 @@ if __name__ == "__main__":
     raw_datasets = datasets.load_dataset(
         "parquet",
         data_files={
-            "train": os.path.join(data_dir, "lmrsd_idea_evaluation.parquet"),
+            "train": os.path.join(data_dir, args.data_file),
         }
     )
     dataset = raw_datasets["train"]
@@ -548,4 +575,4 @@ if __name__ == "__main__":
     logger.info(f"Sample prompt:\n{sample_prompt[0]}")
 
     # run the zs pipeline
-    lmrsd_zero_shot_eval(task=LMRSD_TASK, dataset=dataset)
+    lmrsd_zero_shot_eval(task=LMRSD_TASK, dataset=dataset, llm=args.llm, opfile=args.opfile, multiproc=args.multiproc)
