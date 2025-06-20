@@ -34,6 +34,12 @@ os.environ["POLARS_FORCE_NEW_STREAMING"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 logger.info(f"Polars concurrency set to {pl.thread_pool_size()} threads.")
 
+# directory constants
+base_dir = pathlib.Path("/home/ubuntu/models")
+data_dir = pathlib.Path("/home/ubuntu/data")
+output_dir = pathlib.Path("/home/ubuntu/lmrsd_zs_eval_outputs")
+base_model_path = "/home/ubuntu/models/"
+
 # structured output schema for peer review scoring
 class PeerReviewScoringTuple(BaseModel):
     description: str
@@ -68,16 +74,59 @@ def free_vram_bytes(device="cuda"):
     return free
 
 # helper function to estimate dynamic batch size
-def estimate_dynamo(model, seq_len, safety=0.90):
-    cfg = model.config
-    n_layers  = getattr(cfg, "num_hidden_layers", getattr(cfg, "n_layer", None))
-    hidden    = getattr(cfg, "hidden_size",  cfg.hidden_size)
-    n_params  = sum(p.numel() for p in model.parameters())
-    dtype_sz  = get_dtype_size(model.dtype)
+#def estimate_dynamo(model, seq_len, safety=0.90):
+#    cfg = model.config
+#    n_layers  = getattr(cfg, "num_hidden_layers", getattr(cfg, "n_layer", None))
+#    hidden    = getattr(cfg, "hidden_size",  cfg.hidden_size)
+#    n_params  = sum(p.numel() for p in model.parameters())
+#    dtype_sz  = get_dtype_size(model.dtype)
 
+#    weight_bytes = n_params * dtype_sz
+#    per_token    = 2 * n_layers * hidden * dtype_sz
+#    cache_budget = free_vram_bytes() * safety - weight_bytes
+#    return max(1, cache_budget // (per_token * seq_len))
+
+def _maybe(cfg, dotted):
+    cur = cfg
+    for part in dotted.split("."):
+        if not hasattr(cur, part):
+            return None
+        cur = getattr(cur, part)
+    return cur
+
+# helper function to estimate dynamic batch size
+def estimate_dynamo(model, seq_len: int, safety: float = 0.90) -> int:
+    cfg = model.config
+
+    # ---- discover num layers ------------------------------------------------
+    n_layers = (
+        _maybe(cfg, "num_hidden_layers")
+        or _maybe(cfg, "n_layer")                   # some GPT-J style configs
+        or _maybe(cfg, "text_config.num_hidden_layers")
+        or _maybe(cfg, "model_layers")              # OLMo
+    )
+
+    # ---- discover hidden size ----------------------------------------------
+    hidden = (
+        _maybe(cfg, "hidden_size")
+        or _maybe(cfg, "d_model")
+        or _maybe(cfg, "model_dim")
+        or _maybe(cfg, "text_config.hidden_size")
+    )
+
+    # ultimate fallback → derive from embedding matrix
+    if hidden is None:
+        hidden = model.get_input_embeddings().embedding_dim
+    if n_layers is None or hidden is None:
+        raise ValueError("Could not infer n_layers / hidden_size for " f"{model.__class__.__name__}")
+
+    # ---- memory maths -------------------------------------------------------
+    n_params = sum(p.numel() for p in model.parameters())
+    dtype_sz = 2 if model.dtype in (torch.float16, torch.bfloat16) else 4
     weight_bytes = n_params * dtype_sz
-    per_token    = 2 * n_layers * hidden * dtype_sz  # K + V
-    cache_budget = free_vram_bytes() * safety - weight_bytes
+    per_token = 2 * n_layers * hidden * dtype_sz
+    free, _ = torch.cuda.mem_get_info(model.device)
+    cache_budget = free * safety - weight_bytes
     return max(1, cache_budget // (per_token * seq_len))
 
 # helper function to resume text generation
@@ -283,9 +332,6 @@ def lmrsd_zero_shot_eval(task, dataset):
     ------------
         Tuple(AutoModel, AutoTokenizer) for local (model_client, model_name)
     """
-    # model path
-    base_model_path = "/home/ubuntu/models/"
-
     # set the model-id
     model_catalog = [
         "gemma-3-1b-it",
@@ -311,7 +357,6 @@ def lmrsd_zero_shot_eval(task, dataset):
     ]
 
     # op dir path
-    output_dir = "/home/ubuntu/lmrsd_zs_eval_outputs"
     output_file_path = os.path.join(output_dir, f"{task}.jsonl")
     progress = get_gen_state(output_file_path)
 
@@ -405,9 +450,7 @@ def lmrsd_zero_shot_eval(task, dataset):
 
                 # tokenizer chat template apply
                 # text = process_prompt(dataset[i], tokenizer, device, task="idea", prompt_type="prompt")
-                prompts = [process_prompt(row, tokenizer, device, task="idea", prompt_type="prompt")[0] \
-                        for row in batch
-                ]
+                prompts = [process_prompt(row, tokenizer, device, task="idea", prompt_type="prompt")[0] for row in batch]
 
                 # get the tokenized representations of the input title
                 input_encoded = tokenizer(prompts, padding=True, return_tensors="pt").to(model.device)
@@ -445,6 +488,11 @@ def lmrsd_zero_shot_eval(task, dataset):
                     processed.add(row["paper_id"])
                 f_out.flush()
 
+                # release memory
+                del input_encoded, input_shape, outputs
+                torch.cuda.empty_cache()
+                gc.collect()
+
                 # randomly print an example to showcase the model outputs
                 # random_snap_points = [5, 10, 15, 20]
                 # if i in random_snap_points:
@@ -469,7 +517,6 @@ if __name__ == "__main__":
     set_seed(2025)
 
     # data dir
-    data_dir = "/home/ubuntu/data"
     logger.info(f"Using data from {data_dir}")
 
     # load dataset on disk
@@ -483,7 +530,6 @@ if __name__ == "__main__":
     dataset = raw_datasets["train"]
 
     logger.info(f"LMRSD dataset length: {len(dataset)}")
-
     logger.info("Sample Input from LMRSD dataset:")
     logger.info(f"TITLE:\n{dataset[0]['paper_title']}")
     logger.info("----------------------------------")
@@ -496,7 +542,7 @@ if __name__ == "__main__":
 
     # run the eval on all models for task
     LMRSD_TASK = "idea"
-    tokenizer = AutoTokenizer.from_pretrained("/home/ubuntu/models/Qwen3-0.6B", trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(base_model_path + "Qwen3-0.6B", trust_remote_code=True)
     tokenizer.padding_side = "left"
     sample_prompt = process_prompt(dataset[0], tokenizer, "cuda:0", task="idea", prompt_type="prompt")
     logger.info(f"Sample prompt:\n{sample_prompt[0]}")

@@ -1,0 +1,140 @@
+nohup: ignoring input
+2025-06-06 04:14:14,566 [INFO] __main__ - Polars concurrency set to 12 threads.
+2025-06-06 04:14:16,281 [INFO] __main__ - Using data from /home/ubuntu/data
+2025-06-06 04:14:16,282 [INFO] __main__ - Loading datasets from parquet files...
+2025-06-06 04:14:16,347 [INFO] __main__ - LMRSD dataset length: 28033
+2025-06-06 04:14:16,347 [INFO] __main__ - Sample Input from LMRSD dataset:
+2025-06-06 04:14:16,347 [INFO] __main__ - TITLE:
+Decomposition into invariant spaces with $L_1$-type contrastive learning
+2025-06-06 04:14:16,347 [INFO] __main__ - ----------------------------------
+2025-06-06 04:14:16,348 [INFO] __main__ - ABSTRACT:
+Recent years have witnessed the effectiveness of contrastive learning in obtaining
+the representation of dataset that is useful in interpretation and downstream tasks.
+However, the mechanism by which the contrastive learning succeeds in this feat
+has not been fully uncovered. In this paper, we show that contrastive learning can
+uncover a fine decomposition of the dataset into a set of latent features defined by
+augmentations, and that such a decomposition can be achieved just by changing
+the metric in the simCLR-type loss.
+2025-06-06 04:14:16,348 [INFO] __main__ - ----------------------------------
+2025-06-06 04:14:16,348 [INFO] __main__ - KEYWORDS:
+["Contrastive Learning", "Invariant Space"]
+2025-06-06 04:14:16,348 [INFO] __main__ - ----------------------------------
+2025-06-06 04:14:16,348 [INFO] __main__ - dict_keys(['paper_id', 'paper_title', 'paper_keywords', 'paper_abstract', 'avg_idea_score', 'avg_idea_score_cf', 'median_idea_score', 'median_idea_score_cf'])
+2025-06-06 04:14:16,348 [INFO] __main__ - IDEA Evaluation
+: Rating: 1.5, Confidence: 2.0
+2025-06-06 04:14:16,599 [INFO] __main__ - Sample prompt:
+<|im_start|>system
+
+    You are an expert peer reivew agent working on assessing
+    evaluating and giving a review score for the ideas and
+    content represented in any given scientific texts.
+    <|im_end|>
+<|im_start|>user
+
+        **Task:** You are given Paper title, abstract and keywords of a scientific
+        paper. Your goal is to accurately analyze the entire manuscript and play the
+        role of a peer-reviewer to evaluate the ideas presented in the paper. You need
+        to give a numerical score outlining your review and confidence in your decision.
+
+        **Considerations:**
+        1. You have to give a review of the idea from the range 1 to 10.
+        2. Your rating of the paper's idea must include a confidence on the range of 1 to 10.
+        3. You will be given papers across different scientific fields so be adaptable when reviewing the idea.
+        4. DONOT hallucinate and produce new information.
+
+        **Response Format:**
+        ```json
+        {
+        'idea_only_review_confidence': int
+        'idea_only_review_content': str
+        'idea_only_review_rating': int
+        }
+        ```
+        
+        **Paper Title:**
+        ```plaintext
+        Decomposition into invariant spaces with $L_1$-type contrastive learning
+        ```
+
+        **Paper Abstract:**
+        ```plaintext
+        Recent years have witnessed the effectiveness of contrastive learning in obtaining
+the representation of dataset that is useful in interpretation and downstream tasks.
+However, the mechanism by which the contrastive learning succeeds in this feat
+has not been fully uncovered. In this paper, we show that contrastive learning can
+uncover a fine decomposition of the dataset into a set of latent features defined by
+augmentations, and that such a decomposition can be achieved just by changing
+the metric in the simCLR-type loss.
+        ```
+
+        **Keywords:**
+        ```plaintext
+        ["Contrastive Learning", "Invariant Space"]
+        ```
+        <|im_end|>
+<|im_start|>assistant
+
+2025-06-06 04:14:17,109 [INFO] __main__ - ----------------------------------
+2025-06-06 04:14:17,109 [INFO] __main__ - Using cuda:0 to run LMRSD task: idea on gemma-3-1b-it
+2025-06-06 04:14:17,109 [INFO] __main__ - ----------------------------------
+2025-06-06 04:14:18,663 [INFO] accelerate.utils.modeling - We will use 90% of the memory on device 0 for storing the model, and 10% for the buffer to avoid OOM. You can set `max_memory` in to a higher value to use more memory (at your own risk).
+2025-06-06 04:14:19,265 [INFO] __main__ - Model-tokenizer Load Time:, 2.1562631130218506 seconds
+2025-06-06 04:14:19,265 [INFO] __main__ - ----------------------------------
+2025-06-06 04:14:19,266 [INFO] __main__ - Using batch_size=176.0 for gemma-3-1b-it
+2025-06-06 04:14:19,266 [INFO] __main__ - BOS token-id: 2
+2025-06-06 04:14:19,266 [INFO] __main__ - EOS token-id: 1
+2025-06-06 04:14:19,266 [INFO] __main__ - PAD token-id: 0
+  0%|          | 0/160 [00:00<?, ?it/s]  7%|▋         | 11/160 [00:00<00:01, 101.52it/s] 14%|█▍        | 22/160 [00:00<00:01, 104.44it/s] 21%|██        | 33/160 [00:00<00:01, 106.71it/s] 28%|██▊       | 44/160 [00:00<00:01, 107.28it/s] 34%|███▍      | 55/160 [00:00<00:00, 107.17it/s] 41%|████▏     | 66/160 [00:00<00:00, 106.61it/s] 41%|████▏     | 66/160 [00:17<00:00, 106.61it/s]/home/ubuntu/miniconda3/envs/mlx/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:236: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+ 46%|████▌     | 73/160 [02:35<07:34,  5.23s/it]  46%|████▋     | 74/160 [04:25<14:22, 10.03s/it] 47%|████▋     | 75/160 [06:13<22:45, 16.07s/it] 48%|████▊     | 76/160 [08:04<33:19, 23.80s/it] 48%|████▊     | 77/160 [09:51<44:47, 32.38s/it] 49%|████▉     | 78/160 [11:38<57:25, 42.01s/it] 49%|████▉     | 79/160 [13:24<1:10:16, 52.06s/it] 50%|█████     | 80/160 [15:12<1:22:47, 62.09s/it] 51%|█████     | 81/160 [16:59<1:33:57, 71.36s/it] 51%|█████▏    | 82/160 [18:46<1:43:20, 79.49s/it] 52%|█████▏    | 83/160 [20:33<1:50:44, 86.30s/it] 52%|█████▎    | 84/160 [22:20<1:55:54, 91.51s/it] 53%|█████▎    | 85/160 [24:10<2:00:45, 96.61s/it] 54%|█████▍    | 86/160 [25:56<2:02:25, 99.27s/it] 54%|█████▍    | 87/160 [27:42<2:03:13, 101.28s/it] 55%|█████▌    | 88/160 [29:28<2:03:05, 102.57s/it] 56%|█████▌    | 89/160 [31:15<2:02:48, 103.79s/it] 56%|█████▋    | 90/160 [33:01<2:01:55, 104.50s/it] 57%|█████▋    | 91/160 [34:48<2:00:53, 105.12s/it] 57%|█████▊    | 92/160 [36:34<1:59:32, 105.47s/it] 58%|█████▊    | 93/160 [40:38<2:44:04, 146.93s/it] 59%|█████▉    | 94/160 [43:57<2:58:34, 162.34s/it] 59%|█████▉    | 95/160 [47:17<3:08:04, 173.61s/it] 60%|██████    | 96/160 [50:34<3:12:38, 180.59s/it] 61%|██████    | 97/160 [53:52<3:15:00, 185.72s/it] 61%|██████▏   | 98/160 [57:09<3:15:23, 189.09s/it] 62%|██████▏   | 99/160 [1:00:26<3:14:39, 191.46s/it] 62%|██████▎   | 100/160 [1:03:43<3:13:19, 193.32s/it] 63%|██████▎   | 101/160 [1:07:01<3:11:16, 194.52s/it] 64%|██████▍   | 102/160 [1:10:18<3:09:00, 195.53s/it] 64%|██████▍   | 103/160 [1:13:36<3:06:15, 196.06s/it] 65%|██████▌   | 104/160 [1:16:53<3:03:15, 196.35s/it] 66%|██████▌   | 105/160 [1:20:11<3:00:25, 196.83s/it] 66%|██████▋   | 106/160 [1:23:28<2:57:13, 196.91s/it] 67%|██████▋   | 107/160 [1:26:46<2:54:07, 197.13s/it] 68%|██████▊   | 108/160 [1:30:02<2:50:46, 197.04s/it] 68%|██████▊   | 109/160 [1:33:19<2:47:28, 197.02s/it] 69%|██████▉   | 110/160 [1:36:37<2:44:19, 197.19s/it] 69%|██████▉   | 111/160 [1:39:54<2:41:00, 197.16s/it] 70%|███████   | 112/160 [1:43:12<2:37:54, 197.39s/it] 71%|███████   | 113/160 [1:46:29<2:34:37, 197.40s/it] 71%|███████▏  | 114/160 [1:49:46<2:31:14, 197.28s/it] 72%|███████▏  | 115/160 [1:53:04<2:28:06, 197.48s/it] 72%|███████▎  | 116/160 [1:56:22<2:24:46, 197.42s/it] 73%|███████▎  | 117/160 [1:59:40<2:21:39, 197.67s/it] 74%|███████▍  | 118/160 [2:02:57<2:18:19, 197.60s/it] 74%|███████▍  | 119/160 [2:06:19<2:15:47, 198.72s/it] 75%|███████▌  | 120/160 [2:09:37<2:12:19, 198.48s/it] 76%|███████▌  | 121/160 [2:12:54<2:08:48, 198.17s/it] 76%|███████▋  | 122/160 [2:16:12<2:05:29, 198.14s/it] 77%|███████▋  | 123/160 [2:19:30<2:02:05, 197.98s/it] 78%|███████▊  | 124/160 [2:22:47<1:58:38, 197.75s/it] 78%|███████▊  | 125/160 [2:26:08<1:55:58, 198.82s/it] 79%|███████▉  | 126/160 [2:29:25<1:52:22, 198.32s/it] 79%|███████▉  | 127/160 [2:32:43<1:49:01, 198.22s/it] 80%|████████  | 128/160 [2:36:00<1:45:31, 197.87s/it] 81%|████████  | 129/160 [2:39:18<1:42:08, 197.69s/it] 81%|████████▏ | 130/160 [2:42:35<1:38:52, 197.74s/it] 82%|████████▏ | 131/160 [2:45:53<1:35:28, 197.55s/it] 82%|████████▎ | 132/160 [2:49:10<1:32:11, 197.56s/it] 83%|████████▎ | 133/160 [2:52:27<1:28:49, 197.37s/it] 84%|████████▍ | 134/160 [2:55:44<1:25:30, 197.34s/it] 84%|████████▍ | 135/160 [2:59:02<1:22:18, 197.53s/it] 85%|████████▌ | 136/160 [3:02:20<1:18:58, 197.43s/it] 86%|████████▌ | 137/160 [3:05:37<1:15:43, 197.52s/it] 86%|████████▋ | 138/160 [3:08:54<1:12:22, 197.41s/it] 87%|████████▋ | 139/160 [3:12:12<1:09:09, 197.60s/it] 88%|████████▊ | 140/160 [3:15:30<1:05:48, 197.44s/it] 88%|████████▊ | 141/160 [3:18:47<1:02:31, 197.43s/it] 89%|████████▉ | 142/160 [3:22:05<59:16, 197.56s/it]   89%|████████▉ | 143/160 [3:25:22<55:57, 197.48s/it] 90%|█████████ | 144/160 [3:28:40<52:41, 197.58s/it] 91%|█████████ | 145/160 [3:31:57<49:21, 197.45s/it] 91%|█████████▏| 146/160 [3:35:14<46:02, 197.34s/it] 92%|█████████▏| 147/160 [3:38:32<42:47, 197.50s/it] 92%|█████████▎| 148/160 [3:41:49<39:28, 197.35s/it] 93%|█████████▎| 149/160 [3:45:07<36:12, 197.52s/it] 94%|█████████▍| 150/160 [3:48:24<32:53, 197.37s/it] 94%|█████████▍| 151/160 [3:51:41<29:36, 197.34s/it] 95%|█████████▌| 152/160 [3:54:59<26:20, 197.51s/it] 96%|█████████▌| 153/160 [3:58:16<23:01, 197.41s/it] 96%|█████████▋| 154/160 [4:01:34<19:45, 197.56s/it] 97%|█████████▋| 155/160 [4:04:51<16:27, 197.43s/it] 98%|█████████▊| 156/160 [4:08:08<13:09, 197.33s/it] 98%|█████████▊| 157/160 [4:11:26<09:52, 197.51s/it] 99%|█████████▉| 158/160 [4:14:44<06:34, 197.44s/it] 99%|█████████▉| 159/160 [4:18:01<03:17, 197.56s/it]100%|██████████| 160/160 [4:20:05<00:00, 175.31s/it]100%|██████████| 160/160 [4:20:05<00:00, 97.53s/it] 
+2025-06-06 08:34:24,656 [INFO] __main__ - Completed running zs-evals for len(dataset) items on Gemma3ForCausalLM(
+  (model): Gemma3TextModel(
+    (embed_tokens): Gemma3TextScaledWordEmbedding(262144, 1152, padding_idx=0)
+    (layers): ModuleList(
+      (0-25): 26 x Gemma3DecoderLayer(
+        (self_attn): Gemma3Attention(
+          (q_proj): Linear(in_features=1152, out_features=1024, bias=False)
+          (k_proj): Linear(in_features=1152, out_features=256, bias=False)
+          (v_proj): Linear(in_features=1152, out_features=256, bias=False)
+          (o_proj): Linear(in_features=1024, out_features=1152, bias=False)
+          (q_norm): Gemma3RMSNorm((256,), eps=1e-06)
+          (k_norm): Gemma3RMSNorm((256,), eps=1e-06)
+        )
+        (mlp): Gemma3MLP(
+          (gate_proj): Linear(in_features=1152, out_features=6912, bias=False)
+          (up_proj): Linear(in_features=1152, out_features=6912, bias=False)
+          (down_proj): Linear(in_features=6912, out_features=1152, bias=False)
+          (act_fn): PytorchGELUTanh()
+        )
+        (input_layernorm): Gemma3RMSNorm((1152,), eps=1e-06)
+        (post_attention_layernorm): Gemma3RMSNorm((1152,), eps=1e-06)
+        (pre_feedforward_layernorm): Gemma3RMSNorm((1152,), eps=1e-06)
+        (post_feedforward_layernorm): Gemma3RMSNorm((1152,), eps=1e-06)
+      )
+    )
+    (norm): Gemma3RMSNorm((1152,), eps=1e-06)
+    (rotary_emb): Gemma3RotaryEmbedding()
+    (rotary_emb_local): Gemma3RotaryEmbedding()
+  )
+  (lm_head): Linear(in_features=1152, out_features=262144, bias=False)
+)
+2025-06-06 08:34:26,023 [INFO] __main__ - ----------------------------------
+2025-06-06 08:34:26,023 [INFO] __main__ - Using cuda:0 to run LMRSD task: idea on gemma-3-4b-it
+2025-06-06 08:34:26,025 [INFO] __main__ - ----------------------------------
+2025-06-06 08:34:27,413 [INFO] accelerate.utils.modeling - We will use 90% of the memory on device 0 for storing the model, and 10% for the buffer to avoid OOM. You can set `max_memory` in to a higher value to use more memory (at your own risk).
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.00s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.05it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.04it/s]
+2025-06-06 08:34:29,477 [INFO] __main__ - Model-tokenizer Load Time:, 3.45011043548584 seconds
+2025-06-06 08:34:29,477 [INFO] __main__ - ----------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/llms_LMRSD_baseline.py", line 505, in <module>
+    lmrsd_zero_shot_eval(task=LMRSD_TASK, dataset=dataset)
+  File "/home/ubuntu/llms_LMRSD_baseline.py", line 376, in lmrsd_zero_shot_eval
+    max_bs = estimate_dynamo(model, seq_len=4096)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/llms_LMRSD_baseline.py", line 74, in estimate_dynamo
+    hidden    = getattr(cfg, "hidden_size",  cfg.hidden_size)
+                                             ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/miniconda3/envs/mlx/lib/python3.12/site-packages/transformers/configuration_utils.py", line 209, in __getattribute__
+    return super().__getattribute__(key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Gemma3Config' object has no attribute 'hidden_size'
