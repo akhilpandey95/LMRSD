@@ -84,10 +84,11 @@ async def generate_async(client, model, contents, retries=3, delay=5):
             response = await client.chat.completions.create(
                 model=model,
                 messages=contents,
-                max_tokens=6144,
+                max_tokens=32768,
                 seed=2025,
                 top_p=1.0,
                 temperature=0.0,
+                reasoning_effort="high",
                 extra_body={
                     "chat_template_kwargs": {"enable_thinking": True},
                     "separate_reasoning": True
@@ -177,9 +178,10 @@ def process_prompt(raw_text, task="idea"):
     #print(raw_text)
 
     # init system prompt available
-    sys_prompt = """You are an expert peer reivew agent working on assessing
-evaluating and giving a review score for the ideas and
-content represented in any given scientific texts.
+    sys_prompt = """
+    You are an expert peer reivew agent working on assessing
+    evaluating and giving a review score for the ideas and
+    content represented in any given scientific texts.
     """
 
     # review only the idea of the paper
@@ -242,7 +244,7 @@ your decision.
 2. Your rating of the paper's idea and full text must include a confidence on the range of 1 to 10.
 3. You will be given papers across different scientific fields so be adaptable when reviewing the idea.
 4. Carefully evaluate the full content of the paper and donot jump to quick conclusions.
-5. Review content should be elaborate and detailed, more than 100 words.
+5. Review content should be elaborate and detailed, covering all sections of the paper typically more than 1000 words.
 6. DONOT hallucinate and produce new information.
 
 **Idea Review and Full Text Review combined OUTPUT JSON Format:**
@@ -353,13 +355,17 @@ async def lmrsd_zero_shot_eval(client, dataset, llm, opfile, content_choice, max
     # set the model-id
     model_catalog = {
         "r1-llama": "/kellogg/proj/dashun/LLM/HuggingFaceCache/DeepSeek-R1-Distill-Llama-70B",
+        "r1-qwen": "/kellogg/proj/dashun/LLM/HuggingFaceCache/DeepSeek-R1-Distill-Qwen-32B",
         "llama-33": "/kellogg/proj/dashun/LLM/HuggingFaceCache/Llama-3.3-70B-Instruct/",
+        "llama-4-scout": "/projects/p32494/ai4sciscibench/models/Llama-4-Scout-17B-16E-Instruct",
         "gemma-3-27b": "/kellogg/proj/dashun/LLM/HuggingFaceCache/gemma-3-27b-it",
-        "gptoss-20b": "/projects/p32534/code/hypeline/models/gpt-oss-20b-bf16",
-        "gptoss-120b": "/projects/p32534/code/hypeline/models/gpt-oss-120b-bf16",
+        "gptoss-20b": "/projects/p32534/code/hypeline/models/gpt-oss-20b",
+        "gptoss-120b": "/projects/p32534/code/hypeline/models/gpt-oss-120b",
+        "tulu3-70b": "/projects/p32534/code/hypeline/models/Llama-3.1-Tulu-3-70B",
+        "nemotron-49b": "/projects/p32534/code/hypeline/models/Llama-3_3-Nemotron-Super-49B-v1_5",
         "qwq-32b": "/projects/p32534/code/hypeline/models/QwQ-32B",
         "qwen3-32b": "/kellogg/proj/dashun/LLM/HuggingFaceCache/Qwen3-32B",
-        "qwen3-moe": "/projects/p32534/code/hypeline/models/Qwen3-235B-A22B-Thinking-2507-FP8",
+        "qwen3-moe": "/projects/p32494/ai4sciscibench/models/Qwen3-Next-80B-A3B-Thinking",
         "magistral-small": "/kellogg/proj/dashun/LLM/HuggingFaceCache/Magistral-Small-2506",
         "or-nemotron-32b": "/projects/p32534/code/hypeline/models/OpenReasoning-Nemotron-32B",
         "k2-think": "/projects/p32534/code/hypeline/models/K2-Think"
@@ -380,8 +386,8 @@ async def lmrsd_zero_shot_eval(client, dataset, llm, opfile, content_choice, max
     start_time = time.time()
 
     # max tokens for dynamic batching
-    MAX_BATCH_TOTAL_TOKENS = 450000
-    MAX_OUTPUT_TOKENS = 6144
+    MAX_BATCH_TOTAL_TOKENS = 500000
+    MAX_OUTPUT_TOKENS = 32768
 
     # init dynamic batch generator
     batch_generator = dynamic_batch_generator(dataset, MAX_BATCH_TOTAL_TOKENS, MAX_OUTPUT_TOKENS, input_token_key="tkn_count")
@@ -404,7 +410,7 @@ async def lmrsd_zero_shot_eval(client, dataset, llm, opfile, content_choice, max
             responses = await process_batch(client, filtered_batch, model, semaphore, content_choice)
             for response, row in zip(responses, filtered_batch):
                 # init op
-                output = None
+                cot_output, output = None, None
 
                 # get inp
                 _, INP_PROMPT = process_prompt(row, content_choice)
@@ -414,7 +420,8 @@ async def lmrsd_zero_shot_eval(client, dataset, llm, opfile, content_choice, max
                     if response is not None and response.choices:
                         try:
                             # add reasoning COT + output
-                            output = response.choices[0].message.reasoning_content + response.choices[0].message.content
+                            cot_output = response.choices[0].message.reasoning_content
+                            output = response.choices[0].message.content
                         except Exception as e:
                             # get the output
                             output = response.choices[0].message.content
@@ -426,17 +433,39 @@ async def lmrsd_zero_shot_eval(client, dataset, llm, opfile, content_choice, max
 
                 # output available?
                 if output:
-                    # save the output to result list
-                    result = {
-                        "model_name": model,
-                        key: row[key],
-                        "y_true_ft_med": row["median_ft_score"],
-                        "y_true_ft_med_cf": row["median_ft_score_cf"],
-                        "y_true_ft_avg": row["avg_ft_score"],
-                        "y_true_ft_avg_cf": row["avg_ft_score_cf"],
-                        "input": INP_PROMPT,
-                        "output": output
-                    }
+                    if content_choice == "post_pub":
+                        # save the output to result list
+                        result = {
+                            "model_name": model,
+                            key: row[key],
+                            "openalex_id": row["paperid"],
+                            "mag_concept_id": row["fieldid"],
+                            "adversarial": row["type"],
+                            "y_true_ft_med": row["median_ft_score"],
+                            "y_true_ft_med_cf": row["median_ft_score_cf"],
+                            "y_true_ft_avg": row["avg_ft_score"],
+                            "y_true_ft_avg_cf": row["avg_ft_score_cf"],
+                            "hit_1pct": row["Hit_1pct"],
+                            "hit_5pct": row["Hit_5pct"],
+                            "hit_10pct": row["Hit_10pct"],
+                            "citation_count": row["citation_count"],
+                            "input": INP_PROMPT,
+                            "output": output,
+                            "cot_output": cot_output 
+                        }
+                    else:
+                        # save the output to result list
+                        result = {
+                            "model_name": model,
+                            key: row[key],
+                            "y_true_ft_med": row["median_ft_score"],
+                            "y_true_ft_med_cf": row["median_ft_score_cf"],
+                            "y_true_ft_avg": row["avg_ft_score"],
+                            "y_true_ft_avg_cf": row["avg_ft_score_cf"],
+                            "input": INP_PROMPT,
+                            "output": output,
+                            "cot_output": cot_output 
+                        }
 
                     # write all results for the batch
                     f_out.write(json.dumps(result) + "\n")

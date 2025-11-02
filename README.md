@@ -18,9 +18,6 @@
 - RQ-1: Understanding the joint distribution of idea review scores and paper review scores for a collection of language models.
 - RQ-2: Apart from the accuracy, observe the alignment and misalignment of each model to observe which agrees/disagrees the most with the human label.
 - RQ-3: Assessing reviews where humans/LLMs can gauge hit-paper 1%, 5%, and 10% outcomes.
-- Ablation-1: Observing the effect of stochasticity in generating the reviews for LLMs.
-- Ablation-2: Observing the effect of prompt instructions over idea/paper review scores.
-- Ablation-3: Capturing memorization/generalization to probe pretrained knowledge of dataset.
 
 ### Data
 <img src="./data/media/review_joint_distribution.png" width=500 height=400>
@@ -49,8 +46,24 @@ More about the data can be found [here](./data/README.md).
 
 ### Environment setup
 
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
 ```shell
-TBA
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+or via **pip**
+```shell
+pip install uv
+```
+
+Have the following packages installed to run `LMRSD`
+```shell
+uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+uv pip install bitsandbytes
+uv pip install git+https://github.com/huggingface/transformers
+uv pip install deepspeed
+uv pip install sentencepiece
+uv pip install vllm tiktoken outlines trl openai polars peft tqdm pydantic google-genai matplotlib scikit-learn ninja bs4
 ```
 
 ### Acknowledgement
