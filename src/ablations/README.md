@@ -21,7 +21,7 @@ Columns: ['paper_id', 'year', 'paper_title', \
 > How do the frontier of models reflect on the pre-training corpus when it comes to openreviews data ?
 > For LMRSD.c dataset, adjust the script to include calc_perplexity(), and include log_probs.
 ```shell
-python lmrsd_abl1.py
+python lmrsd_abl1.py --dataset /projects/p32534/code/LMRSD/data/lmrsd_postpub_outcomes.parquet --llm qwen3-32b --opfile abl1_qwen3 --bs 2 --tensor-parallel-size 4
 ```
 
 **ablation 2**

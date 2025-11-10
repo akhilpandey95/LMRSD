@@ -10,17 +10,17 @@ os.environ['POLARS_MAX_THREADS'] = "12"
 os.environ["POLARS_FORCE_NEW_STREAMING"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+import math
 import time
 import json
-import asyncio
 import pathlib
 import argparse
 import logging
 import datasets
 import polars as pl
-from tqdm import tqdm
 from collections import defaultdict
 from vllm import LLM, SamplingParams
+from typing import Any, Dict, List, Optional
 
 # enable logging
 logging.basicConfig(
@@ -33,8 +33,7 @@ logger = logging.getLogger(__name__)
 logger.info(f"Polars concurrency set to {pl.thread_pool_size()} threads.")
 
 # directory constants
-data_dir = pathlib.Path("/projects/p32534/code/hypeline/data")
-output_dir = pathlib.Path("/projects/p32534/code/hypeline/resextract")
+output_dir = pathlib.Path("./")
 
 # helper function to resume text generation
 def get_gen_state(path):
@@ -64,7 +63,7 @@ def calculate_perplexity(logprobs: List[float]) -> float:
     ------------
     logprobs: List[float]
         List of log probabilities
-    
+
     Returns
     ------------
     perplexity: float
@@ -73,15 +72,12 @@ def calculate_perplexity(logprobs: List[float]) -> float:
     # check if logprobs is empty
     if not logprobs:
         return float('inf')
-    
+
     # calculate average log probability
     avg_log_prob = sum(logprobs) / len(logprobs)
 
     # calculate perplexity
-    perplexity = np.exp(-avg_log_prob)
-
-    # return perplexity
-    return perplexity
+    return math.exp(-avg_log_prob)
 
 # helper function to initialize the vllm model
 def initialize_vllm_model(model_path: str, tensor_parallel_size: int = 4) -> LLM:
@@ -126,7 +122,7 @@ def initialize_vllm_model(model_path: str, tensor_parallel_size: int = 4) -> LLM
     return llm
 
 # helper function to generate content for a batch
-def generate_batch_vllm(llm: LLM, prompts: List[str], sampling_params: SamplingParams) -> List[Optional[str]]:
+def generate_batch_vllm(llm: LLM, prompts: List[str], sampling_params: SamplingParams) -> List[Optional[Dict[str, Any]]]:
     """
     Generate content using vLLM for a batch of prompts
 
@@ -141,24 +137,92 @@ def generate_batch_vllm(llm: LLM, prompts: List[str], sampling_params: SamplingP
 
     Returns
     ------------
-    outputs: List of generated texts or None if failed
+    outputs: List of generation payloads or None if failed
     """
     try:
         # batch promots and generate
         outputs = llm.generate(prompts, sampling_params)
 
         # get generated text from outputs
-        generated_texts = []
+        generated_batches: List[Optional[Dict[str, Any]]] = []
         for output in outputs:
-            if output.outputs:
-                # get completion object
-                print(output.outputs)
-                generated_text = output.outputs[0].text
-                generated_texts.append(generated_text)
-            else:
-                generated_texts.append(None)
+            if not output.outputs:
+                generated_batches.append(None)
+                continue
 
-        return generated_texts
+            completion = output.outputs[0]
+            token_stats: List[Dict[str, Any]] = []
+            logprob_values: List[float] = []
+            cot_output: Optional[str] = None
+
+            if completion.logprobs:
+                for idx, logprob_dict in enumerate(completion.logprobs):
+                    if not logprob_dict:
+                        continue
+
+                    chosen_token = None
+                    if hasattr(completion, "tokens") and completion.tokens and idx < len(completion.tokens):
+                        chosen_token = completion.tokens[idx]
+
+                    # pick chosen token (rank 0 if available else highest logprob)
+                    selected_token_str = None
+                    selected_entry = None
+                    for token_str, entry in logprob_dict.items():
+                        if getattr(entry, "rank", None) == 0:
+                            selected_token_str = token_str
+                            selected_entry = entry
+                            break
+
+                    if selected_entry is None:
+                        selected_token_str, selected_entry = max(
+                            logprob_dict.items(),
+                            key=lambda item: item[1].logprob,
+                        )
+
+                    logprob_values.append(selected_entry.logprob)
+                    token_stats.append(
+                        {
+                            "token": chosen_token if chosen_token is not None else selected_token_str,
+                            "token_str": selected_token_str,
+                            "logprob": selected_entry.logprob,
+                            "rank": getattr(selected_entry, "rank", None),
+                            "top_logprobs": [
+                                {
+                                    "token": tok,
+                                    "logprob": candidate.logprob,
+                                    "rank": getattr(candidate, "rank", None),
+                                }
+                                for tok, candidate in sorted(
+                                    logprob_dict.items(),
+                                    key=lambda item: getattr(item[1], "rank", float("inf")),
+                                )
+                            ],
+                        }
+                    )
+
+            perplexity = calculate_perplexity(logprob_values) if logprob_values else None
+            # capture chain-of-thought / reasoning content when available
+            cot_output = getattr(completion, "reasoning_output", None)
+            if cot_output is None:
+                cot_output = getattr(completion, "reasoning_content", None)
+            if cot_output is None:
+                cot_output = getattr(completion, "reasoning_text", None)
+            if isinstance(cot_output, list):
+                cot_output = "\n".join(str(chunk) for chunk in cot_output if chunk)
+
+            generated_batches.append(
+                {
+                    "output": completion.text,
+                    "cot_output": cot_output,
+                    "token_logprobs": token_stats,
+                    "logprob_values": logprob_values,
+                    "perplexity": perplexity,
+                    "cumulative_logprob": getattr(completion, "cumulative_logprob", None),
+                    "num_output_tokens": len(logprob_values),
+                }
+            )
+
+        return generated_batches
     except Exception as e:
         logger.warning(f"Batch generation failed: {str(e)}")
         return [None] * len(prompts)
@@ -329,8 +393,7 @@ def lmrsd_abl1(llm: LLM, dataset: datasets.Dataset, model_name: str, model_path:
         top_p=1.0,
         max_tokens=32768,
         seed=2025,
-        logprobs=True,
-        top_logprobs=10,
+        logprobs=10,
     )
 
     # op dir path
@@ -344,9 +407,6 @@ def lmrsd_abl1(llm: LLM, dataset: datasets.Dataset, model_name: str, model_path:
     total_processed = 0
     start_time = time.time()
 
-    # store results
-    results = []
-
     # model type for prompt formatting
     model_type = "llama"  # default
     if "qwen" in model_name.lower() or "qwq" in model_name.lower():
@@ -354,18 +414,21 @@ def lmrsd_abl1(llm: LLM, dataset: datasets.Dataset, model_name: str, model_path:
     elif "gemma" in model_name.lower():
         model_type = "gemma"
 
+    processed = progress[model_path]
+    total_token_count = 0
+    total_logprob_sum = 0.0
+    perplexity_values: List[float] = []
+
     # iterate over dataset for zs-eval in batches
     batch_size = bs
     with open(output_file_path, "a", encoding="utf-8") as f_out:
         for start in range(0, len(dataset), batch_size):
-            batch_start_time = time.time()
 
             # start and end
             end = min(start + batch_size, len(dataset))
             idx_range = range(start, end)
 
             # get the batch
-            processed = progress.get(model_path, set())
             batch = [dataset[i] for i in idx_range if dataset[i][key] not in processed]
             # is the batch empty?
             if not batch:
@@ -390,13 +453,25 @@ def lmrsd_abl1(llm: LLM, dataset: datasets.Dataset, model_name: str, model_path:
                     "model_name": model_path,
                     key: row[key],
                     "input": inp_prompt,
-                    "output": output
+                    "output": output["output"] if output else None,
+                    "cot_output": output["cot_output"] if output else None,
+                    "perplexity": output["perplexity"] if output else None,
+                    "logprob_values": output["logprob_values"] if output else None,
+                    "cumulative_logprob": output["cumulative_logprob"] if output else None,
+                    "num_output_tokens": output["num_output_tokens"] if output else None,
+                    "token_logprobs": output["token_logprobs"] if output else None,
                 }
 
                 # write all results for the batch
                 f_out.write(json.dumps(result) + "\n")
                 processed.add(row[key])
                 total_processed += 1
+
+                if output and output["logprob_values"]:
+                    total_logprob_sum += sum(output["logprob_values"])
+                    total_token_count += len(output["logprob_values"])
+                    if output["perplexity"] is not None:
+                        perplexity_values.append(output["perplexity"])
 
             # flush the output file
             f_out.flush()
@@ -406,17 +481,28 @@ def lmrsd_abl1(llm: LLM, dataset: datasets.Dataset, model_name: str, model_path:
 
     # fin
     total_time = time.time() - start_time
+    if total_token_count > 0:
+        avg_logprob = total_logprob_sum / total_token_count
+        dataset_perplexity = math.exp(-avg_logprob)
+        logger.info(
+            f"Ablation 1 token stats -> avg logprob: {avg_logprob:.4f}, "
+            f"dataset perplexity estimate: {dataset_perplexity:.4f}"
+        )
+    if perplexity_values:
+        mean_sample_ppl = sum(perplexity_values) / len(perplexity_values)
+        logger.info(f"Mean sample perplexity across {len(perplexity_values)} generations: {mean_sample_ppl:.4f}")
     logger.info(f"Completed Ablation 1 evaluation for {model_name} successfully! Total time: {total_time/60:.2f} minutes")
 
 # kaboom
 if __name__ == "__main__":
     # cli args
     parser = argparse.ArgumentParser(description="Compute result extraction for a given model")
-    parser.add_argument("--data-file", required=True, help="Parquet file with Openarxiv id/DOI info data and prompts.")
+    parser.add_argument("--dataset", required=True, help="Parquet file with Openarxiv id/DOI info data and prompts.")
     parser.add_argument("--llm", choices=["gptoss-120b", "qwen3-32b"], required=True, help="Model being used for ZS inference.")
     parser.add_argument("--opfile", required=True, help="Output file name for ZS inference.")
     parser.add_argument("--bs", type=int, required=True, help="Batch size for ZS inference.")
-    parser.add_argument("--tensor-parallel-size", type=int, default=4, help="Number of GPUs to use for tensor parallelism (default 4)")    args = parser.parse_args()
+    parser.add_argument("--tensor-parallel-size", type=int, default=4, help="Number of GPUs to use for tensor parallelism (default 4)")
+    args = parser.parse_args()
 
     # model path
     model_path = {
@@ -428,9 +514,8 @@ if __name__ == "__main__":
     model_path = model_path[args.llm]
 
     # load dataset on disk
-    logger.info("Loading lmrsd_postpub_outcomes.parquet...")
-    raw_datasets = datasets.load_dataset("parquet", data_files={"train": os.path.join(data_dir, "lmrsd_postpub_outcomes.parquet")})
-
+    logger.info(f"Loading dataset from {args.dataset} ...")
+    raw_datasets = datasets.load_dataset("parquet", data_files={"train": str(args.dataset)})
     dataset = raw_datasets["train"]
     logger.info(f"LMRSD.c dataset length: {len(dataset)}")
 
