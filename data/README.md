@@ -159,4 +159,4 @@ Due to nulls in the full text within `lmrsd_ft_evaluation.parquet`, the entries 
 ```
 
 **Acknowledgement**
-Thanks to `@sumuks` and the huggingface repo **[sumuks/openreview-reviews-filtered](https://huggingface.co/datasets/sumuks/openreview-reviews-filtered)** which were crucial for the dataset, experiments, and meethodology of the paper.
+Thanks to a public OpenReview reviews dataset hosted on Hugging Face, which was crucial for the dataset, experiments, and methodology of the paper.

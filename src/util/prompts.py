@@ -1,7 +1,6 @@
 # This Source Code Form is subject to the terms of the MIT
 # License. If a copy of the same was not distributed with this
-# file, You can obtain one at
-# https://github.com/akhilpandey95/LMRSD/blob/main/LICENSE.
+# file, you can obtain one at the repository root in LICENSE.
 
 # helper function to load/initalize the prompt
 def load_sample_prompt(dataframe, sample_idx=0, structured_guidelines=False):

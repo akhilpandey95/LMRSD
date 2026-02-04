@@ -90,10 +90,10 @@ uv pip install vllm tiktoken outlines trl openai polars peft tqdm pydantic googl
 ```
 
 ### Acknowledgement
-Thanks to `@sumuks` and the huggingface repo **[sumuks/openreview-reviews-filtered](https://huggingface.co/datasets/sumuks/openreview-reviews-filtered)** which were crucial for the dataset, experiments, and meethodology of the paper.
+Thanks to a public OpenReview reviews dataset hosted on Hugging Face, which was crucial for the dataset, experiments, and methodology of the paper.
 
 ### License
-[MIT License](https://github.com/akhilpandey95/LMRSD/blob/main/LICENSE)
+[MIT License](LICENSE)
 
 ### Authors and Collaborators
-[Akhil Pandey](https://github.com/akhilpandey95)
+Anonymous authors (for double-blind review).

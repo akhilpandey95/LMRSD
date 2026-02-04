@@ -1,7 +1,6 @@
 # This Source Code Form is subject to the terms of the MIT
 # License. If a copy of the same was not distributed with this
-# file, You can obtain one at
-# https://github.com/akhilpandey95/LMRSD/blob/main/LICENSE.
+# file, you can obtain one at the repository root in LICENSE.
 
 import os
 
@@ -354,19 +353,19 @@ async def lmrsd_zero_shot_eval(client, dataset, llm, opfile, content_choice, max
 
     # set the model-id
     model_catalog = {
-        "r1-llama": "/kellogg/proj/dashun/LLM/HuggingFaceCache/DeepSeek-R1-Distill-Llama-70B",
-        "r1-qwen": "/kellogg/proj/dashun/LLM/HuggingFaceCache/DeepSeek-R1-Distill-Qwen-32B",
-        "llama-33": "/kellogg/proj/dashun/LLM/HuggingFaceCache/Llama-3.3-70B-Instruct/",
+        "r1-llama": "/path/to/HuggingFaceCache/DeepSeek-R1-Distill-Llama-70B",
+        "r1-qwen": "/path/to/HuggingFaceCache/DeepSeek-R1-Distill-Qwen-32B",
+        "llama-33": "/path/to/HuggingFaceCache/Llama-3.3-70B-Instruct/",
         "llama-4-scout": "/projects/p32494/ai4sciscibench/models/Llama-4-Scout-17B-16E-Instruct",
-        "gemma-3-27b": "/kellogg/proj/dashun/LLM/HuggingFaceCache/gemma-3-27b-it",
+        "gemma-3-27b": "/path/to/HuggingFaceCache/gemma-3-27b-it",
         "gptoss-20b": "/projects/p32534/code/hypeline/models/gpt-oss-20b",
         "gptoss-120b": "/projects/p32534/code/hypeline/models/gpt-oss-120b",
         "tulu3-70b": "/projects/p32534/code/hypeline/models/Llama-3.1-Tulu-3-70B",
         "nemotron-49b": "/projects/p32534/code/hypeline/models/Llama-3_3-Nemotron-Super-49B-v1_5",
         "qwq-32b": "/projects/p32534/code/hypeline/models/QwQ-32B",
-        "qwen3-32b": "/kellogg/proj/dashun/LLM/HuggingFaceCache/Qwen3-32B",
+        "qwen3-32b": "/path/to/HuggingFaceCache/Qwen3-32B",
         "qwen3-moe": "/projects/p32494/ai4sciscibench/models/Qwen3-Next-80B-A3B-Thinking",
-        "magistral-small": "/kellogg/proj/dashun/LLM/HuggingFaceCache/Magistral-Small-2506",
+        "magistral-small": "/path/to/HuggingFaceCache/Magistral-Small-2506",
         "or-nemotron-32b": "/projects/p32534/code/hypeline/models/OpenReasoning-Nemotron-32B",
         "k2-think": "/projects/p32534/code/hypeline/models/K2-Think"
     }

@@ -1,7 +1,6 @@
 # This Source Code Form is subject to the terms of the MIT
 # License. If a copy of the same was not distributed with this
-# file, You can obtain one at
-# https://github.com/akhilpandey95/LMRSD/blob/main/LICENSE.
+# file, you can obtain one at the repository root in LICENSE.
 
 import os
 
@@ -507,7 +506,7 @@ if __name__ == "__main__":
     # model path
     model_path = {
         "gptoss-120b": "/projects/p32534/code/hypeline/models/gpt-oss-120b",
-        "qwen3-32b": "/kellogg/proj/dashun/LLM/HuggingFaceCache/Qwen3-32B"
+        "qwen3-32b": "/path/to/HuggingFaceCache/Qwen3-32B"
     }
 
     # get model path

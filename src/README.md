@@ -37,8 +37,8 @@ nohup /projects/p32534/code/LMRSD/gemma3_27b_vllm.sh > /projects/p32534/code/LMR
 
 **sglang**
 ```shell
-nohup /projects/p32534/sglang/bin/python -m sglang.launch_server --model /kellogg/proj/dashun/LLM/HuggingFaceCache/gemma-3-27b-it --tp 4 --mem-fraction-static 0.85 --context-length 36864 --max-running-requests 256 --max-total-tokens 131072 > sglang_gemma3_LMRSD.log 2>&1 &
-nohup /projects/p32534/sglang/bin/python -m sglang.launch_server --model /kellogg/proj/dashun/LLM/HuggingFaceCache/Llama-3.3-70B-Instruct/ --tp 4 --mem-fraction-static 0.95 --context-length 36864 --max-running-requests 256 --max-total-tokens 131072 > sglang_llama3_LMRSD.log 2>&1 &
+nohup /projects/p32534/sglang/bin/python -m sglang.launch_server --model /path/to/HuggingFaceCache/gemma-3-27b-it --tp 4 --mem-fraction-static 0.85 --context-length 36864 --max-running-requests 256 --max-total-tokens 131072 > sglang_gemma3_LMRSD.log 2>&1 &
+nohup /projects/p32534/sglang/bin/python -m sglang.launch_server --model /path/to/HuggingFaceCache/Llama-3.3-70B-Instruct/ --tp 4 --mem-fraction-static 0.95 --context-length 36864 --max-running-requests 256 --max-total-tokens 131072 > sglang_llama3_LMRSD.log 2>&1 &
 nohup /projects/p32534/sglang/bin/python -m sglang.launch_server --model /projects/p32534/code/hypeline/models/Llama-3.1-Tulu-3-70B --tp 4 --mem-fraction-static 0.95 --context-length 36864 --max-running-requests 256 --max-total-tokens 131072 > sglang_tulu3_LMRSD.log 2>&1 &
 nohup /projects/p32534/sglang/bin/python -m sglang.launch_server --model /projects/p32534/code/hypeline/models/gpt-oss-20b-bf16 --tp 4 --mem-fraction-static 0.85 > /projects/p32534/code/LMRSD/sglang_gpt20b_LMRSD.log 2>&1 &
 nohup /projects/p32534/sglang/bin/python -m sglang.launch_server --model /projects/p32534/code/hypeline/models/gpt-oss-20b --tp 4 --mem-fraction-static 0.85 > /projects/p32534/code/LMRSD/sglang_gpt20b_LMRSD.log 2>&1 &
@@ -102,7 +102,7 @@ nohup /projects/p32534/sglang/bin/python -m sglang.launch_server \
 **R1-Distill-llama-70b**
 ```shell
 nohup /projects/p32534/sglang/bin/python -m sglang.launch_server \
-  --model /kellogg/proj/dashun/LLM/HuggingFaceCache/DeepSeek-R1-Distill-Llama-70B \
+  --model /path/to/HuggingFaceCache/DeepSeek-R1-Distill-Llama-70B \
   --tp 4 \
   --mem-fraction-static 0.90 \
   --context-length 32768 \
@@ -119,7 +119,7 @@ nohup /projects/p32534/sglang/bin/python -m sglang.launch_server \
 **R1-Distill-qwen-32b**
 ```shell
 nohup /projects/p32534/sglang/bin/python -m sglang.launch_server \
-  --model /kellogg/proj/dashun/LLM/HuggingFaceCache/DeepSeek-R1-Distill-Qwen-32B \
+  --model /path/to/HuggingFaceCache/DeepSeek-R1-Distill-Qwen-32B \
   --tp 4 \
   --mem-fraction-static 0.90 \
   --context-length 32768 \
@@ -273,7 +273,7 @@ nohup /projects/p32534/mlx/bin/python -u lmrsd_post_pub.py --data-file lmrsd_pos
 
 ```shell
 nohup /projects/p32534/sglang/bin/python -m sglang.launch_server \
-  --model /kellogg/proj/dashun/LLM/HuggingFaceCache/Qwen3-32B \
+  --model /path/to/HuggingFaceCache/Qwen3-32B \
   --tp 4 \
   --reasoning-parser qwen3 \
   --mem-fraction-static 0.88 \
